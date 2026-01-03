@@ -17,7 +17,7 @@ def make_template(content=''):
         "method": "POST",
         "url": "/v4/chat/completions", 
         "body": {
-            "model": "glm-4-flash",
+            "model": "glm-4-air",
             "messages": messages,
             "temperature": 0.1
         }
@@ -176,5 +176,18 @@ if __name__ == '__main__':
 
 
 模仿以上正文和评论，生成一些新的正文和评论，要求至少一半的评论需要包含情感倾向，表达喜爱或者吐槽皆可
+以json格式输出：
+```json
+    { 
+        "notes": [
+            {
+                "content": "", 
+                "comments": []
+            }
+        ]
+    }
+```
 """
-    generate_jsonl(count=1000, content=content)
+    generate_jsonl(count=300, content=content)
+
+
