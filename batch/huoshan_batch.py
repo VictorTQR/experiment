@@ -14,10 +14,7 @@ def make_template(content=''):
     ]
     return {
         "custom_id": str(uuid.uuid4()),
-        "method": "POST",
-        "url": "/v4/chat/completions", 
         "body": {
-            "model": "glm-4-plus",
             "messages": messages,
             "temperature": 0.1
         }
@@ -180,7 +177,7 @@ if __name__ == '__main__':
 ```json
 {
     "content": "",
-    "publish_time": "2025-01-01",
+    "publish_time": "2023-04-10",
     "like_count": 256,
     "comment_count": 98,
     "collect_count": 45,
@@ -191,7 +188,7 @@ if __name__ == '__main__':
     "comments": [
         {
             "content": "",
-            "publish_time": "2025-01-02",
+            "publish_time": "2023-04-11",
             "like_count": 15,
             "sentiment": "非常负面, 负面, 中性, 正面, 非常正面中的一种"
         }
