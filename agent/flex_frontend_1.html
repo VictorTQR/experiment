@@ -1,0 +1,673 @@
+<!-- from z.ai glm-4.7 -->
+<!-- 
+现在制作一个复杂智能体项目，需要实现智能体回复消息的展示：
+1. 展示数据包含思考内容，工具调用，正式回复三种
+2. 智能体的执行流程可能比较长，因此会出现多次调用
+-->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>复杂智能体交互模拟器</title>
+    <style>
+        :root {
+            --bg-color: #f7f9fb;
+            --chat-bg: #ffffff;
+            --primary-color: #4f46e5;
+            --primary-hover: #4338ca;
+            --text-main: #1f2937;
+            --text-secondary: #6b7280;
+            --border-color: #e5e7eb;
+            --thinking-bg: #f9fafb;
+            --thinking-border: #e5e7eb;
+            --tool-bg: #f3f4f6;
+            --tool-border: #d1d5db;
+            --user-msg-bg: #4f46e5;
+            --user-msg-text: #ffffff;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --radius-md: 12px;
+            --radius-sm: 8px;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Header */
+        header {
+            background-color: var(--chat-bg);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: var(--shadow-sm);
+            z-index: 10;
+        }
+
+        .agent-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .agent-avatar {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        .agent-details h1 {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .agent-status {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--success-color);
+        }
+
+        .status-dot.busy {
+            background-color: var(--warning-color);
+            animation: pulse 1.5s infinite;
+        }
+
+        /* Main Chat Area */
+        main {
+            flex: 1;
+            overflow-y: auto;
+            padding: 2rem 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            scroll-behavior: smooth;
+            max-width: 900px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .message-row {
+            display: flex;
+            gap: 1rem;
+            width: 100%;
+        }
+
+        .message-row.user {
+            flex-direction: row-reverse;
+        }
+
+        .avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+        }
+
+        .avatar.agent {
+            background-color: #e0e7ff;
+            color: var(--primary-color);
+        }
+
+        .avatar.user {
+            background-color: var(--text-secondary);
+            color: white;
+        }
+
+        .message-content {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            max-width: 85%;
+        }
+
+        .bubble {
+            padding: 1rem;
+            border-radius: var(--radius-md);
+            line-height: 1.6;
+            font-size: 0.95rem;
+            position: relative;
+        }
+
+        .user .bubble {
+            background-color: var(--user-msg-bg);
+            color: var(--user-msg-text);
+            border-bottom-right-radius: 2px;
+        }
+
+        .agent .bubble {
+            background-color: var(--chat-bg);
+            border: 1px solid var(--border-color);
+            border-bottom-left-radius: 2px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        /* Complex Agent Components Styles */
+        
+        /* Thinking Block */
+        .thinking-block {
+            background-color: var(--thinking-bg);
+            border: 1px solid var(--thinking-border);
+            border-radius: var(--radius-sm);
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            overflow: hidden;
+        }
+
+        .thinking-header {
+            padding: 0.5rem 0.75rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background-color: rgba(0,0,0,0.02);
+            user-select: none;
+            transition: background 0.2s;
+        }
+
+        .thinking-header:hover {
+            background-color: rgba(0,0,0,0.04);
+        }
+
+        .thinking-icon {
+            font-size: 0.9rem;
+        }
+
+        .thinking-content {
+            padding: 0.75rem;
+            border-top: 1px solid var(--thinking-border);
+            white-space: pre-wrap;
+            display: none; /* Hidden by default */
+            background-color: white;
+            font-family: 'Consolas', 'Monaco', monospace;
+            line-height: 1.5;
+        }
+        
+        .thinking-content.open {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        /* Tool Call Block */
+        .tool-call {
+            background-color: var(--tool-bg);
+            border: 1px solid var(--tool-border);
+            border-radius: var(--radius-sm);
+            padding: 0.75rem;
+            font-size: 0.85rem;
+            margin-top: 4px;
+        }
+
+        .tool-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .tool-badge {
+            background-color: #e0e7ff;
+            color: var(--primary-color);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+        }
+
+        .tool-details {
+            background-color: white;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 0.5rem;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.8rem;
+            color: #4b5563;
+            overflow-x: auto;
+        }
+
+        .tool-result {
+            margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px dashed var(--tool-border);
+            color: var(--text-secondary);
+        }
+
+        .tool-result.success { color: var(--success-color); }
+        .tool-result.error { color: #ef4444; }
+
+        /* Input Area */
+        footer {
+            background-color: var(--chat-bg);
+            border-top: 1px solid var(--border-color);
+            padding: 1.5rem;
+        }
+
+        .input-container {
+            max-width: 900px;
+            margin: 0 auto;
+            position: relative;
+            display: flex;
+            gap: 10px;
+        }
+
+        textarea {
+            flex: 1;
+            padding: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            resize: none;
+            height: 60px;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        textarea:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+
+        button.send-btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: var(--radius-md);
+            padding: 0 1.5rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        button.send-btn:hover {
+            background-color: var(--primary-hover);
+        }
+        
+        button.send-btn:disabled {
+            background-color: #a5a6f6;
+            cursor: not-allowed;
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+            70% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+        }
+        
+        @keyframes blink {
+            0% { opacity: .2; }
+            20% { opacity: 1; }
+            100% { opacity: .2; }
+        }
+
+        .typing-cursor::after {
+            content: '▋';
+            display: inline-block;
+            vertical-align: baseline;
+            animation: blink 1s step-end infinite;
+            color: var(--text-main);
+            font-size: 0.8em;
+            margin-left: 2px;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background-color: #d1d5db;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background-color: #9ca3af;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="agent-info">
+        <div class="agent-avatar">AI</div>
+        <div class="agent-details">
+            <h1>高级分析助手</h1>
+            <div class="agent-status">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">在线准备就绪</span>
+            </div>
+        </div>
+    </div>
+    <div style="font-size: 0.9rem; color: var(--text-secondary);">
+        模型: Agent-Pro-v1
+    </div>
+</header>
+
+<main id="chatContainer">
+    <!-- Initial Welcome Message -->
+    <div class="message-row agent">
+        <div class="avatar agent">🤖</div>
+        <div class="message-content">
+            <div class="bubble">
+                你好！我是一个具备复杂推理和工具调用能力的智能体。你可以让我帮你查询天气、进行数据计算或分析代码。我会展示我的思考过程和使用的工具。
+            </div>
+        </div>
+    </div>
+</main>
+
+<footer>
+    <div class="input-container">
+        <textarea id="userInput" placeholder="输入你的指令... (例如: 帮我查询北京现在的天气，并计算一下如果气温升高5度是多少)" onkeydown="handleEnter(event)"></textarea>
+        <button class="send-btn" id="sendBtn" onclick="handleSend()">
+            发送
+        </button>
+    </div>
+</footer>
+
+<script>
+    const chatContainer = document.getElementById('chatContainer');
+    const userInput = document.getElementById('userInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+
+    let isProcessing = false;
+
+    // 工具定义
+    const TOOLS = {
+        weather: {
+            name: "Weather_Search",
+            desc: "实时天气查询工具",
+            icon: "🌤️"
+        },
+        calculator: {
+            name: "Math_Engine",
+            desc: "高级数学计算器",
+            icon: "🧮"
+        },
+        code_interpreter: {
+            name: "Code_Interpreter",
+            desc: "Python 代码解释器",
+            icon: "🐍"
+        }
+    };
+
+    // 模拟智能体回复的复杂逻辑
+    async function handleSend() {
+        const text = userInput.value.trim();
+        if (!text || isProcessing) return;
+
+        // 1. 添加用户消息
+        addMessage('user', text);
+        userInput.value = '';
+        userInput.style.height = '60px'; // Reset height
+        setAgentStatus('busy');
+
+        // 2. 创建智能体回复的容器
+        const { messageContent, bubble } = addMessage('agent', '');
+        bubble.classList.add('typing-cursor');
+
+        // 3. 模拟复杂的多步执行流程
+        await simulateComplexAgentFlow(text, messageContent, bubble);
+        
+        bubble.classList.remove('typing-cursor');
+        setAgentStatus('ready');
+    }
+
+    // 添加消息到界面
+    function addMessage(role, text) {
+        const row = document.createElement('div');
+        row.className = `message-row ${role}`;
+        
+        const avatar = document.createElement('div');
+        avatar.className = `avatar ${role}`;
+        avatar.textContent = role === 'user' ? '👤' : '🤖';
+
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content';
+
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        bubble.textContent = text;
+
+        contentDiv.appendChild(bubble);
+        row.appendChild(avatar);
+        row.appendChild(contentDiv);
+        
+        chatContainer.appendChild(row);
+        scrollToBottom();
+
+        return { row, messageContent: contentDiv, bubble };
+    }
+
+    // 辅助：添加思考块
+    function addThinkingBlock(contentDiv, thoughtText) {
+        const block = document.createElement('div');
+        block.className = 'thinking-block';
+        
+        const header = document.createElement('div');
+        header.className = 'thinking-header';
+        header.innerHTML = '<span class="thinking-icon">🧠</span> <span>深度思考过程</span>';
+        
+        const content = document.createElement('div');
+        content.className = 'thinking-content';
+        content.textContent = thoughtText;
+
+        header.onclick = () => {
+            content.classList.toggle('open');
+            const icon = header.querySelector('.thinking-icon');
+            icon.textContent = content.classList.contains('open') ? '🔽' : '🧠';
+        };
+
+        block.appendChild(header);
+        block.appendChild(content);
+        contentDiv.appendChild(block);
+        scrollToBottom();
+    }
+
+    // 辅助：添加工具调用块
+    function addToolCallBlock(contentDiv, toolKey, params, result) {
+        const tool = TOOLS[toolKey];
+        const block = document.createElement('div');
+        block.className = 'tool-call';
+        
+        const header = document.createElement('div');
+        header.className = 'tool-header';
+        header.innerHTML = `<span>${tool.icon}</span> <span>调用工具: ${tool.name}</span> <span class="tool-badge">${tool.desc}</span>`;
+        
+        const details = document.createElement('div');
+        details.className = 'tool-details';
+        details.textContent = `输入参数: ${JSON.stringify(params)}`;
+
+        const resultDiv = document.createElement('div');
+        resultDiv.className = `tool-result ${result.success ? 'success' : 'error'}`;
+        resultDiv.innerHTML = `<strong>执行结果:</strong> ${result.data}`;
+
+        block.appendChild(header);
+        block.appendChild(details);
+        if (result.data) block.appendChild(resultDiv);
+        
+        contentDiv.appendChild(block);
+        scrollToBottom();
+    }
+
+    // 核心：模拟智能体执行流
+    async function simulateComplexAgentFlow(userQuery, container, finalBubble) {
+        // 步骤 1: 初始思考
+        await wait(800);
+        addThinkingBlock(container, `用户询问: "${userQuery}"\n分析意图: 需要多步骤处理。\n1. 解析查询中的关键信息。\n2. 判断是否需要外部数据。\n3. 规划工具调用顺序。`);
+
+        // 步骤 2: 模拟根据输入选择工具 (这里简单判断关键词，实际项目是 LLM 决策)
+        let toolsToUse = [];
+        let finalResponseText = "";
+
+        if (userQuery.includes("天气")) {
+            toolsToUse.push({ type: 'weather', params: { city: "北京", unit: "celsius" }, delay: 1500, res: "北京，晴，气温 22°C，湿度 45%" });
+        }
+        if (userQuery.includes("计算") || userQuery.includes("度")) {
+            // 如果之前查了天气，这里做个关联计算
+            const temp = 22; 
+            toolsToUse.push({ type: 'calculator', params: { expression: `${temp} + 5` }, delay: 1000, res: "27" });
+        }
+        if (userQuery.includes("代码") || userQuery.includes("解释")) {
+            toolsToUse.push({ 
+                type: 'code_interpreter', 
+                params: { code: "print('Hello Agent World')" }, 
+                delay: 2000, 
+                res: "Hello Agent World\n[Execution completed in 0.02s]" 
+            });
+        }
+
+        // 如果没有触发特定工具，给个通用思考
+        if (toolsToUse.length === 0) {
+            await wait(600);
+            addThinkingBlock(container, "查询意图明确，无需外部工具，直接基于知识库生成回复。");
+            finalResponseText = "这是一个很好的问题。基于我的内部知识，我可以告诉你...\n\n(此处省略具体内容，模拟通用回复)";
+        } else {
+            // 步骤 3: 依次执行工具
+            addThinkingBlock(container, "已制定执行计划，开始调用工具链...");
+            
+            let contextData = {};
+
+            for (const tool of toolsToUse) {
+                // 再次思考：为什么用这个工具
+                addThinkingBlock(container, `正在准备调用 ${TOOLS[tool.type].name}...\n理由: 获取必要的数据以支持最终结论。`);
+                
+                await wait(tool.delay); // 模拟网络延迟
+                
+                addToolCallBlock(container, tool.type, tool.params, { success: true, data: tool.res });
+                
+                contextData[tool.type] = tool.res;
+            }
+
+            // 步骤 4: 最终总结与生成回复
+            await wait(800);
+            addThinkingBlock(container, "工具调用结束，数据收集完毕。\n正在综合思考结果并组织语言...");
+            
+            // 简单的回复生成逻辑
+            if (contextData.weather && contextData.calculator) {
+                finalResponseText = `根据查询结果：\n\n当前 ${contextData.weather}。\n\n按照您的要求，如果气温升高 5 度，预计将达到 **${contextData.calculator}°C**。这是一个适宜户外活动的温度。`;
+            } else if (contextData.weather) {
+                finalResponseText = `查询到最新的天气信息：${contextData.weather}。\n希望这个信息对您的出行有所帮助！`;
+            } else if (contextData.code_interpreter) {
+                finalResponseText = `代码已执行完毕。\n\n**输出结果：**\n\`\`\`\n${contextData.code_interpreter}\n\`\`\`\n代码运行无误。`;
+            }
+        }
+
+        // 步骤 5: 打字机效果输出最终回复
+        await typeText(finalBubble, finalResponseText);
+    }
+
+    // 打字机效果工具
+    async function typeText(element, text) {
+        if (!text) return;
+        element.textContent = '';
+        // 简单的 Markdown 粗略解析处理 (仅处理 **加粗**)
+        // 实际生产中建议使用 marked.js 等库
+        const parts = text.split(/(\*\*.*?\*\*|\n)/g); 
+
+        for (const part of parts) {
+            if (part.startsWith('\n')) {
+                element.appendChild(document.createElement('br'));
+                await wait(50);
+            } else if (part.startsWith('**') && part.endsWith('**')) {
+                const b = document.createElement('strong');
+                b.textContent = part.slice(2, -2);
+                element.appendChild(b);
+                await wait(30);
+            } else {
+                for (const char of part) {
+                    element.textContent += char;
+                    await wait(20); // 打字速度
+                    scrollToBottom();
+                }
+            }
+        }
+        scrollToBottom();
+    }
+
+    // 状态管理
+    function setAgentStatus(status) {
+        isProcessing = status === 'busy';
+        if (status === 'busy') {
+            statusDot.classList.add('busy');
+            statusText.textContent = '正在思考与执行...';
+            userInput.disabled = true;
+            sendBtn.disabled = true;
+        } else {
+            statusDot.classList.remove('busy');
+            statusText.textContent = '在线准备就绪';
+            userInput.disabled = false;
+            sendBtn.disabled = false;
+            userInput.focus();
+        }
+    }
+
+    // 通用工具：等待
+    function wait(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    // 通用工具：滚动到底部
+    function scrollToBottom() {
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    // 输入框回车处理
+    function handleEnter(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSend();
+        }
+    }
+</script>
+
+</body>
+</html>
